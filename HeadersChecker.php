@@ -3,44 +3,100 @@
 class HeadersChecker
 {
 
+    private $user_info;
+
     public function __construct()
     {
+
+        // $this->user_info = $this->get_logged_user_info();
+        // add_action('plugins_loaded', array($this, 'init'));
         add_action('init', array($this, 'init'));
     }
 
     public function init()
     {
+
+        //check if ACF continues installed
+        // if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
+        //     deactivate_plugins(plugin_basename(__FILE__));
+        //     wp_die('Headers Checker plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
+        // }
+
         add_action('admin_notices', array($this, 'admin_notices'));
         add_action('admin_footer', array($this, 'add_verify_script'));
         add_action('init', array($this, 'register_scripts'));
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_scripts'));
-
         add_action('admin_menu', array($this, 'header_checker_page'));
 
+        add_action('save_post', array($this, 'schedule_post_update'));
+        // add_action('update_last_user_event', array($this, 'update_last_user'));
+        add_action('update_last_user_event', array($this, 'update_last_user_with_lock'));
 
+        add_action('admin_init', array($this, 'posk_requires_wordpress_version'));
+
+        // if (function_exists('acf_add_local_field_group') && class_exists('acf')) {
         $this->add_new_acf_fields();
+        // }
     }
+
+
+    function posk_requires_wordpress_version()
+    {
+        if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
+            deactivate_plugins(HEADERS_CHECKER_FILE);
+            // wp_die('03 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
+
+            $button = '<a href="' . esc_attr(network_admin_url('plugins.php')) . '" rel="nofollow ugc">Return to Plugins</a>';
+            wp_die('05 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin. <br />' . $button);
+        }
+    }
+
 
 
     public function admin_notices()
     {
         if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
-            deactivate_plugins(plugin_basename(__FILE__));
-            wp_die('This plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
+            if (deactivate_plugins(plugin_basename(__FILE__))) {
+                // echo '<div class="notice notice-error is-dismissible">
+                // <p>Headers Checker plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.</p>
+                // ';
+                wp_die('01 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
+            }
+            // echo '01 - Headers Checker plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.';
         }
     }
 
+    /**
+     * Check if ACF is installed and activated
+     */
     public function headers_checker_activate()
     {
 
         if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
             deactivate_plugins(plugin_basename(__FILE__));
-            wp_die('This plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
+            wp_die('02 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
         }
     }
 
+    //function when plugins is deactivated
+    public function headers_checker_deactivate()
+    {
+        //remove the fields
+        if (!function_exists('acf_add_local_field_group')) {
+            return;
+        }
+        acf_remove_local_field_group('group_headers_checker');
+    }
+
+    /**
+     * Add new ACF fields
+     */
     public function add_new_acf_fields()
     {
+        if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
+            // deactivate_plugins(plugin_basename(__FILE__));
+            wp_die('04 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
+        }
         acf_add_local_field_group(array(
             'key' => 'group_headers_checker',
             'title' => 'Post Settings',
@@ -72,7 +128,9 @@ class HeadersChecker
         ));
     }
 
-
+    /**
+     * Add Header Checker page
+     */
     public function header_checker_page()
     {
         add_menu_page(
@@ -84,6 +142,9 @@ class HeadersChecker
         );
     }
 
+    /**
+     * Headers analyze page, displaying detected headers and previous headers
+     */
     public function header_checker_analyze_page()
     {
         $post_id = isset($_GET['post_id']) ? intval($_GET['post_id']) : 0;
@@ -94,48 +155,45 @@ class HeadersChecker
 
         $post = get_post($post_id);
         $content = apply_filters('the_content', $post->post_content);
+        $headers = $this->extract_headers_from_string($content);
 
-        //show the raw post_content, using HTML
-        echo '<h1>Original post content</h1>';
-        echo '<div style="margin-bottom:50px; background: #F4F4F4; border:Solid 1px #E1E1E1; padding:30px;">';
-        echo htmlspecialchars($post->post_content);
+        echo '<div style="display:flex; gap:100px; margin:50px 20px 0 0; padding:30px; background:white; border:Solid 1px #F4F4F4;" >';
+        echo '<div>';
+        echo '<h1>Detected headers</h1>';
+        echo $this->get_headers_table($headers);
         echo '</div>';
 
-        // Extração dos headers
-        // preg_match_all('/<h([1-9])*>(.*?)<\/h\1>/i', $content, $matches);
-        preg_match_all('#<h(\d)[^>]*?>(.*?)<[^>]*?/h\d>#i', $content, $matches);
-        $headers = array_combine($matches[1], $matches[2]);
-
-        echo '<h1>Detected headers</h1>';
-        echo '<table>';
-        // print_r($headers);
-        foreach ($headers as $level => $header) {
-            echo "<tr><td><strong>H$level</strong></td><td>$header</td></tr>";
-        }
-        echo '</table>';
-
-
-
-
-        //I need to compare the new headers with the old headers, maybe using the content from the last REVISION?
+        // Fetch post revisions to then compare new headers with old headers
         $last_revision = wp_get_post_revisions($post_id, [
             'offset'       => 1,
             'posts_per_page'  => 1,
         ]);
+
+        //Check if exists previous revisions or not
+        if (empty($last_revision)) {
+            echo "
+            <div>
+                <h1>Previous headers</h1>
+                <p>{no headers found}</p>
+            </div>
+            ";
+            return;
+        }
+
         $last_revision = $last_revision[array_key_first($last_revision)];
         $last_revision_content = apply_filters('the_content', $last_revision->post_content);
+        $last_revision_headers = $this->extract_headers_from_string($last_revision_content);
 
-        preg_match_all('#<h(\d)[^>]*?>(.*?)<[^>]*?/h\d>#i', $last_revision_content, $last_revision_headers);
-        $last_revision_headers = array_combine($last_revision_headers[1], $last_revision_headers[2]);
-
-        echo '<h1>Detected headers from last revision - Revision ID: ' . $last_revision->ID . '</h1>';
-        echo '<table>';
-        foreach ($last_revision_headers as $level => $header) {
-            echo "<tr><td><strong>H$level</strong></td><td>$header</td></tr>";
-        }
-        echo '</table>';
+        echo '<div>';
+        echo '<h1>Previous headers</h1>';
+        echo $this->get_headers_table($last_revision_headers);
+        echo '</div>';
+        echo '</div>';
     }
 
+    /**
+     * Add verify script
+     */
     public function add_verify_script()
     {
         echo "<script>
@@ -146,6 +204,9 @@ class HeadersChecker
         </script>";
     }
 
+    /**
+     * Register scripts
+     */
     public function register_scripts()
     {
         wp_register_script(
@@ -160,9 +221,78 @@ class HeadersChecker
         );
     }
 
+    /**
+     * Enqueue scripts
+     */
     public function enqueue_scripts()
     {
         wp_enqueue_script('verify-button-script');
         wp_enqueue_style('verify-button-style');
+    }
+
+    /**
+     * Extract headers from string
+     */
+    public function extract_headers_from_string($content)
+    {
+        preg_match_all('#<h(\d)[^>]*?>(.*?)<[^>]*?/h\d>#i', $content, $matches);
+        return array_combine($matches[1], $matches[2]);
+    }
+
+    /**
+     * Get headers table
+     */
+    public function get_headers_table($headers)
+    {
+
+        $table = '';
+
+        if (!$headers) {
+            $table = '
+            <div>
+                <p>{no headers found}</p>
+            </div>
+            ';
+        }
+        foreach ($headers as $level => $header) {
+            $table .= "<div><strong>H$level</strong> => $header</div>";
+        }
+        return $table;
+    }
+
+    /**
+     * Schedule post update using Scheduled Events
+     */
+    public function schedule_post_update($post_id)
+    {
+        if (wp_is_post_revision($post_id)) return;
+
+        if (!wp_next_scheduled('update_last_user_event', array($post_id))) {
+            wp_schedule_single_event(time(), 'update_last_user_event', array($post_id));
+        }
+    }
+
+    /**
+     * Update last user and date
+     */
+    public function update_last_user($post_id)
+    {
+        $current_time = current_time('mysql');
+
+        update_field('last_user', json_encode(["testes_" . rand(100, 10000), get_current_user_id()]), $post_id);
+        update_field('last_update_date', $current_time, $post_id);
+    }
+
+    /**
+     * Update last user and date using transiente to lock the post update
+     */
+    public function update_last_user_with_lock($post_id)
+    {
+        $lock_key = "lock_update_post_$post_id";
+        //in case of lock, return
+        if (get_transient($lock_key)) return;
+        set_transient($lock_key, true, 30);
+        $this->update_last_user($post_id);
+        delete_transient($lock_key);
     }
 }
