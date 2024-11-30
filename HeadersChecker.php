@@ -7,21 +7,11 @@ class HeadersChecker
 
     public function __construct()
     {
-
-        // $this->user_info = $this->get_logged_user_info();
-        // add_action('plugins_loaded', array($this, 'init'));
         add_action('init', array($this, 'init'));
     }
 
     public function init()
     {
-
-        //check if ACF continues installed
-        // if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
-        //     deactivate_plugins(plugin_basename(__FILE__));
-        //     wp_die('Headers Checker plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
-        // }
-
         add_action('admin_notices', array($this, 'admin_notices'));
         add_action('admin_footer', array($this, 'add_verify_script'));
         add_action('init', array($this, 'register_scripts'));
@@ -29,14 +19,13 @@ class HeadersChecker
         add_action('admin_menu', array($this, 'header_checker_page'));
 
         add_action('save_post', array($this, 'schedule_post_update'));
-        // add_action('update_last_user_event', array($this, 'update_last_user'));
+        add_action('update_last_user_event', array($this, 'update_last_user'));
         add_action('update_last_user_event', array($this, 'update_last_user_with_lock'));
 
         add_action('admin_init', array($this, 'posk_requires_wordpress_version'));
 
-        // if (function_exists('acf_add_local_field_group') && class_exists('acf')) {
         $this->add_new_acf_fields();
-        // }
+
     }
 
 
@@ -44,8 +33,7 @@ class HeadersChecker
     {
         if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
             deactivate_plugins(HEADERS_CHECKER_FILE);
-            // wp_die('03 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
-
+            
             $button = '<a href="' . esc_attr(network_admin_url('plugins.php')) . '" rel="nofollow ugc">Return to Plugins</a>';
             wp_die('05 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin. <br />' . $button);
         }
@@ -57,12 +45,9 @@ class HeadersChecker
     {
         if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
             if (deactivate_plugins(plugin_basename(__FILE__))) {
-                // echo '<div class="notice notice-error is-dismissible">
-                // <p>Headers Checker plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.</p>
-                // ';
                 wp_die('01 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
             }
-            // echo '01 - Headers Checker plugin requires ACF/SCF). Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.';
+            
         }
     }
 
@@ -94,7 +79,6 @@ class HeadersChecker
     public function add_new_acf_fields()
     {
         if (!function_exists('acf_add_local_field_group') || !class_exists('acf')) {
-            // deactivate_plugins(plugin_basename(__FILE__));
             wp_die('04 - Headers Checker plugin requires ACF/SCF. Install and activate Advanced Custom Fields (Secure Custom Fields) before activating our plugin.');
         }
         acf_add_local_field_group(array(
